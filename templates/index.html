@@ -1,0 +1,259 @@
+import os
+import random
+import string
+import hashlib
+import socket
+import subprocess
+import requests
+
+import netifaces as ni
+from flask import Flask, render_template_string, request
+
+app = Flask(__name__)
+
+# -------------------------
+# 1. Generate Player ID
+# -------------------------
+def get_mac_address(interface_priority=('eth0', 'en0', 'Ethernet', 'ens33')):
+    """
+    Attempt to retrieve the MAC address from a list of possible interfaces.
+    Adjust interface_priority for your environment if needed.
+    """
+    for iface in ni.interfaces():
+        if iface in interface_priority:
+            addrs = ni.ifaddresses(iface)
+            if ni.AF_LINK in addrs:
+                return addrs[ni.AF_LINK][0]['addr']
+    # Fallback: pick the first interface that has a MAC address
+    for iface in ni.interfaces():
+        addrs = ni.ifaddresses(iface)
+        if ni.AF_LINK in addrs:
+            return addrs[ni.AF_LINK][0]['addr']
+    return None
+
+def generate_player_id():
+    mac = get_mac_address()
+    if not mac:
+        mac = "00:00:00:00:00:00"
+    # Create a random salt
+    salt = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    # Combine MAC + salt and hash it
+    raw_str = mac + salt
+    hash_str = hashlib.sha256(raw_str.encode()).hexdigest()
+    # Format the player ID to look somewhat like "XXXX-XXXX-XXXX-XXXX"
+    # (just an example format, feel free to customize)
+    return f"{hash_str[0:4]}-{hash_str[4:8]}-{hash_str[8:12]}-{hash_str[12:16]}"
+
+# -------------------------
+# 2. Detect Local IP + 127.0.0.1
+# -------------------------
+def get_local_ips():
+    """
+    Return a list of all IPv4 addresses (excluding loopback).
+    """
+    ip_list = []
+    for iface in ni.interfaces():
+        addrs = ni.ifaddresses(iface)
+        if ni.AF_INET in addrs:
+            for link in addrs[ni.AF_INET]:
+                ip_addr = link.get('addr')
+                if ip_addr and not ip_addr.startswith('127.'):
+                    ip_list.append(ip_addr)
+    return ip_list
+
+# -------------------------
+# 3. Network Status
+# -------------------------
+def is_ethernet_up(interface_priority=('eth0', 'en0', 'Ethernet', 'ens33')):
+    """
+    Checks if one of the prioritized interfaces is 'UP' by verifying it has an IPv4.
+    """
+    for iface in ni.interfaces():
+        if iface in interface_priority:
+            addrs = ni.ifaddresses(iface)
+            if ni.AF_INET in addrs:
+                return True
+    return False
+
+def check_dns():
+    """
+    Simple DNS check by attempting to resolve 'google.com'.
+    """
+    try:
+        socket.gethostbyname('google.com')
+        return "OK"
+    except Exception:
+        return "FAIL"
+
+def check_ping(host="8.8.8.8"):
+    """
+    Ping a host (default: 8.8.8.8) once. Returns "OK" if successful, else "FAIL".
+    NOTE: This may not work on Windows as-is. Adjust for your OS if needed.
+    """
+    try:
+        # '-c 1' = 1 ping, '-W 1' = 1 second timeout
+        result = subprocess.run(
+            ["ping", "-c", "1", "-W", "1", host],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return "OK" if result.returncode == 0 else "FAIL"
+    except Exception:
+        return "FAIL"
+
+def get_dhcp_info():
+    """
+    Get the default gateway IP (DHCP server) from netifaces.gateways().
+    """
+    gws = ni.gateways()
+    default = gws.get('default')
+    if default and ni.AF_INET in default:
+        return default[ni.AF_INET][0]  # IP address of the default gateway
+    return "Unknown"
+
+def check_server_connectivity(server_url="https://screenly.com"):
+    """
+    Check connectivity to the server (screenly.com) via an HTTP GET.
+    """
+    try:
+        r = requests.get(server_url, timeout=3)
+        if r.status_code == 200:
+            return "Connected"
+        else:
+            return f"HTTP {r.status_code}"
+    except Exception:
+        return "Not Connected"
+
+# -------------------------
+# Flask Routes
+# -------------------------
+@app.route('/')
+def index():
+    # Generate the player ID
+    player_id = generate_player_id()
+
+    # Get local IP addresses (excluding loopback)
+    local_ips = get_local_ips()
+
+    # Always include 127.0.0.1
+    local_ips_with_loopback = ['127.0.0.1'] + local_ips
+
+    # We can detect the port from the request (if behind a proxy, adjust accordingly)
+    port = request.host.split(':')[-1] if ':' in request.host else '5000'
+
+    # Gather network statuses
+    ethernet_status = "UP" if is_ethernet_up() else "DOWN"
+    dns_status = check_dns()
+    ping_status = check_ping()
+    dhcp_info = get_dhcp_info()
+    server_status = check_server_connectivity()
+
+    # Render everything in a single template string for brevity
+    html_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Welcome!</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 40px;
+            }
+            .header {
+                text-align: center;
+            }
+            .header h1 {
+                margin: 0;
+                font-size: 2em;
+            }
+            .player-id {
+                text-align: center;
+                font-size: 1.2em;
+                margin: 10px 0;
+            }
+            .section {
+                margin-top: 20px;
+            }
+            .network-status, .connectivity-status {
+                margin-top: 20px;
+                border: 1px solid #aaa;
+                padding: 10px;
+                border-radius: 5px;
+                max-width: 600px;
+            }
+            .network-status h3, .connectivity-status h3 {
+                margin-top: 0;
+            }
+            .info-list {
+                list-style-type: none;
+                padding-left: 0;
+            }
+            .info-list li {
+                margin: 5px 0;
+            }
+            a {
+                color: #007BFF;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Welcome!</h1>
+        </div>
+
+        <div class="player">
+            Player id <span class="player-id">{{ player_id }}</span>
+        </div>
+
+        <div class="section">
+            <p>Register your player id at <a href="https://screenly.com" target="_blank">screenly.com</a> to manage</p>
+            <p>
+                To connect from browser use:
+                <ul class="info-list">
+                {% for ip in local_ips_with_loopback %}
+                  <li><a href="http://{{ ip }}:{{ port }}" target="_blank">http://{{ ip }}:{{ port }}</a></li>
+                {% endfor %}
+                </ul>
+            </p>
+            <p>
+                To locally change settings, connect keyboard and press <strong>Ctrl N</strong> or <strong>F6</strong>
+            </p>
+        </div>
+
+        <div class="network-status">
+            <h3>Status of network</h3>
+            <ul class="info-list">
+                <li>Ethernet: {{ ethernet_status }}</li>
+                <li>DNS: {{ dns_status }}</li>
+                <li>PING: {{ ping_status }}</li>
+                <li>DHCP: {{ dhcp_info }}</li>
+            </ul>
+        </div>
+
+        <div class="connectivity-status">
+            <h3>Connectivity status</h3>
+            <ul class="info-list">
+                <li>Server: screenly.com</li>
+                <li>Status: {{ server_status }}</li>
+            </ul>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(
+        html_template,
+        player_id=player_id,
+        local_ips_with_loopback=local_ips_with_loopback,
+        port=port,
+        ethernet_status=ethernet_status,
+        dns_status=dns_status,
+        ping_status=ping_status,
+        dhcp_info=dhcp_info,
+        server_status=server_status
+    )
+
+if __name__ == '__main__':
+    # By default, Flask runs on port 5000.
+    # You can change host='0.0.0.0' to be accessible from other devices on the same network.
+    app.run(debug=True, host='0.0.0.0', port=5000)
