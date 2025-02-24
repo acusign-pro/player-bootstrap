@@ -11,6 +11,69 @@ from flask import Flask, render_template_string, request
 
 app = Flask(__name__)
 
+
+def load_cpu_info(file_path="/proc/cpuinfo"):
+    """
+    Reads the given file and parses the CPU info into a dictionary with the following keys:
+      - "processors": a list of dicts (one per processor block)
+      - "Revision": a string with the revision value
+      - "Serial": a string with the serial number
+      
+    The file is expected to contain processor blocks (each with key: value pairs)
+    and final lines with keys "Revision", "Serial" (and optionally "Model").
+    """
+    result = {"processors": [], "Revision": None, "Serial": None, "Model": None}
+    current_proc = None
+
+    with open(file_path, "r") as f:
+        for line in f:
+            # Remove any leading/trailing whitespace
+            line = line.strip()
+            if not line:
+                # Blank line signals end of a block; if we were collecting a processor, store it.
+                if current_proc:
+                    result["processors"].append(current_proc)
+                    current_proc = None
+                continue
+
+            # Split line into key and value at the first colon
+            if ":" in line:
+                key, value = line.split(":", 1)
+                key = key.strip()
+                value = value.strip()
+
+                # If this line starts a new processor block, start a new dict.
+                # We assume processor blocks begin with the key "processor"
+                if key.lower() == "processor":
+                    if current_proc is not None:
+                        # Save previous processor block if exists
+                        result["processors"].append(current_proc)
+                    current_proc = {}
+
+                # If we are in a processor block, add the key/value to that dict.
+                if current_proc is not None:
+                    current_proc[key] = value
+                else:
+                    # Not inside a processor block, so treat as a global value.
+                    # We check for keys we want at the root level.
+                    if key == "Revision":
+                        result["Revision"] = value
+                    elif key == "Serial":
+                        result["Serial"] = value
+                    elif key == "Model":
+                        result["Model"] = value
+            else:
+                # Lines without a colon are ignored.
+                continue
+
+    # In case the file did not end with a blank line, add the last processor block.
+    if current_proc:
+        result["processors"].append(current_proc)
+    
+    return result
+
+
+
 # -------------------------
 # 1. Generate Player ID
 # -------------------------
@@ -32,14 +95,19 @@ def get_mac_address(interface_priority=('eth0', 'en0', 'Ethernet', 'ens33')):
     return None
 
 def generate_player_id():
-    mac = get_mac_address()
-    print(f"MAC: {mac}")
-    if not mac:
-        mac = "00:00:00:00:00:00"
-    # Generate a hash based solely on the MAC address to ensure consistency
-    hash_str = hashlib.sha256(mac.encode()).hexdigest()
-    # Format the player ID to look like "XXXX-XXXX-XXXX-XXXX"
-    return f"{hash_str[0:4]}-{hash_str[4:8]}-{hash_str[8:12]}-{hash_str[12:16]}"
+    cpu_info = load_cpu_info()
+    serial = cpu_info.get("Serial")
+    if serial:
+        return f"{serial[0:4]}-{serial[4:8]}-{serial[8:12]}-{serial[12:16]}"
+    else:
+        mac = get_mac_address()
+        print(f"MAC: {mac}")
+        if not mac:
+            mac = "00:00:00:00:00:00"
+        # Generate a hash based solely on the MAC address to ensure consistency
+        hash_str = hashlib.sha256(mac.encode()).hexdigest()
+        # Format the player ID to look like "XXXX-XXXX-XXXX-XXXX"
+        return f"{hash_str[0:4]}-{hash_str[4:8]}-{hash_str[8:12]}-{hash_str[12:16]}"
 
 # -------------------------
 # 2. Detect Local IP + 127.0.0.1
