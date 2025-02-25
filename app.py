@@ -5,7 +5,7 @@ import hashlib
 import socket
 import subprocess
 import requests
-
+import os
 import netifaces as ni
 from flask import Flask, render_template_string, request
 
@@ -13,49 +13,31 @@ app = Flask(__name__)
 
 
 def load_cpu_info(file_path="/proc/cpuinfo"):
-    """
-    Reads the given file and parses the CPU info into a dictionary with the following keys:
-      - "processors": a list of dicts (one per processor block)
-      - "Revision": a string with the revision value
-      - "Serial": a string with the serial number
-      
-    The file is expected to contain processor blocks (each with key: value pairs)
-    and final lines with keys "Revision", "Serial" (and optionally "Model").
-    """
+    if not os.path.exists(file_path):
+        print(f"Error: The file '{file_path}' does not exist.")
+        return {}
     result = {"processors": [], "Revision": None, "Serial": None, "Model": None}
     current_proc = None
-
     with open(file_path, "r") as f:
         for line in f:
-            # Remove any leading/trailing whitespace
             line = line.strip()
             if not line:
-                # Blank line signals end of a block; if we were collecting a processor, store it.
                 if current_proc:
                     result["processors"].append(current_proc)
                     current_proc = None
                 continue
 
-            # Split line into key and value at the first colon
             if ":" in line:
                 key, value = line.split(":", 1)
                 key = key.strip()
                 value = value.strip()
-
-                # If this line starts a new processor block, start a new dict.
-                # We assume processor blocks begin with the key "processor"
                 if key.lower() == "processor":
                     if current_proc is not None:
-                        # Save previous processor block if exists
                         result["processors"].append(current_proc)
                     current_proc = {}
-
-                # If we are in a processor block, add the key/value to that dict.
                 if current_proc is not None:
                     current_proc[key] = value
                 else:
-                    # Not inside a processor block, so treat as a global value.
-                    # We check for keys we want at the root level.
                     if key == "Revision":
                         result["Revision"] = value
                     elif key == "Serial":
@@ -63,13 +45,9 @@ def load_cpu_info(file_path="/proc/cpuinfo"):
                     elif key == "Model":
                         result["Model"] = value
             else:
-                # Lines without a colon are ignored.
                 continue
-
-    # In case the file did not end with a blank line, add the last processor block.
     if current_proc:
         result["processors"].append(current_proc)
-    
     return result
 
 
@@ -175,9 +153,9 @@ def get_dhcp_info():
         return default[ni.AF_INET][0]  # IP address of the default gateway
     return "Unknown"
 
-def check_server_connectivity(server_url="https://screenly.com"):
+def check_server_connectivity(server_url="https://acusign.pro"):
     """
-    Check connectivity to the server (screenly.com) via an HTTP GET.
+    Check connectivity to the server (acusign.pro) via an HTTP GET.
     """
     try:
         r = requests.get(server_url, timeout=3)
@@ -306,7 +284,7 @@ def index():
 
         <div class="content">
           <div class="section">
-              <p>Register your player id at <a href="https://screenly.com" target="_blank">screenly.com</a> to manage.</p>
+              <p>Register your player id at <a href="https://acusign.pro" target="_blank">acusign.pro</a> to manage.</p>
               <p>
                   To connect from browser use:
                   {% for ip in local_ips_with_loopback %}
@@ -331,7 +309,7 @@ def index():
           <div class="connectivity-status">
               <h3 class="nunito-header">Connectivity Status</h3>
               <ul class="info-list">
-                  <li>Server: screenly.com</li>
+                  <li>Server: acusign.pro</li>
                   <li>Status: {{ server_status }}</li>
               </ul>
           </div>
