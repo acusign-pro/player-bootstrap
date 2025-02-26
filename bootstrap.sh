@@ -18,6 +18,9 @@ apt-get update
 # Install Git, Python3, and pip if they are not already installed.
 echo "Installing Git, Python3, and pip..."
 apt-get install -y git python3 python3-pip
+sudo apt-get install libsqlite3-dev
+
+./configure --enable-loadable-sqlite-extensions && make && sudo make install
 
 # Set the installation directory and repository URL.
 INSTALL_DIR="/opt/player-bootstrap"
