@@ -1,17 +1,10 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Digital Signage Player</title>
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
+{% extends 'base.html' %}
+
+{% block title %}Landing Page{% endblock %}
+
+{% block content %}
     <div class="header">
-        <h1 class="nunito-header">Welcome to the Digital Signage Player</h1>
+        <h1 class="nunito-header">Welcome to AcuSign Player – Your Digital Canvas!</h1>
     </div>
 
     <div class="player">
@@ -20,9 +13,9 @@
 
     <div class="content">
         <div class="section">
-            <p>Register your player ID at 
+            <p>Unlock the full potential of your device by registering your Player ID at
                 <a href="https://acusign.pro" target="_blank">acusign.pro</a> 
-                to manage your device.
+                and join a vibrant network of creative displays. You can scan the QR code.
             </p>
             <p>
                 To access the player from a browser, use one of the following links:
@@ -31,27 +24,40 @@
                 {% endfor %}
             </p>
             <p>
-                To locally change settings, connect a keyboard and press <strong>Ctrl N</strong> or <strong>F6</strong>.
+                To locally change settings, connect a keyboard and press <strong>Ctrl+N</strong> or <strong>F6</strong>.
             </p>
         </div>
 
-        <div class="network-status">
-            <h3 class="nunito-header">Network Status</h3>
-            <ul class="info-list">
-                <li>Ethernet: {{ ethernet_status }}</li>
-                <li>DNS: {{ dns_status }}</li>
-                <li>PING: {{ ping_status }}</li>
-                <li>DHCP: {{ dhcp_info }}</li>
-            </ul>
+        <div class="status-container">
+            <div class="network-status">
+                <h3 class="nunito-header">Network Status</h3>
+                <ul class="info-list">
+                    <li>Ethernet: {{ ethernet_status }}</li>
+                    <li>DNS: {{ dns_status }}</li>
+                    <li>PING: {{ ping_status }}</li>
+                    <li>DHCP: {{ dhcp_info }}</li>
+                    <li>Local IPs:
+                        {% if local_ips_with_loopback %}
+                            {% for ip in local_ips_with_loopback %}
+                                <span class="status-value">{{ ip }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="status-value">N/A</span>
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+
+            <div class="connectivity-status">
+                <h3 class="nunito-header">Connectivity Status</h3>
+                <ul class="info-list">
+                    <li>Server: acusign.pro</li>
+                    <li>Status: {{ server_status }}</li>
+                </ul>
+            </div>
         </div>
 
-        <div class="connectivity-status">
-            <h3 class="nunito-header">Connectivity Status</h3>
-            <ul class="info-list">
-                <li>Server: acusign.pro</li>
-                <li>Status: {{ server_status }}</li>
-            </ul>
-        </div>
+        <img src="data:image/png;base64,{{ qr_code_data }}" alt="QR Code" class="qr-code">
+
     </div>
-</body>
-</html>
+{% endblock %}

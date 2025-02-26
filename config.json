@@ -1,0 +1,15 @@
+{
+    "updated_at": "2025-02-26T18:49:47.887718",
+    "player_id": "928e-15d5-3b0f-SIGN",
+    "wifi": {
+        "ssid": "Guest Network",
+        "password": "test123"
+    },
+    "connection": {
+        "ethernet": "UP",
+        "dns": "OK",
+        "ping": "OK",
+        "dhcp": "192.0.0.1",
+        "server": "Connected"
+    }
+}
