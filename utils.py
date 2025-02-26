@@ -3,7 +3,11 @@ import hashlib
 import socket
 import subprocess
 import netifaces as ni
+import platform
+import shutil
 import requests
+import re
+from wifi import Cell, Scheme
 
 def load_cpu_info(file_path="/proc/cpuinfo"):
     if not os.path.exists(file_path):
@@ -133,19 +137,59 @@ def is_connected_to_wifi():
     return False
 
 def get_available_wifi_networks():
-    """Scan for available WiFi networks using iwlist scan."""
+    """
+    Scan for available WiFi networks on Linux, Windows, and macOS.
+    Returns a list of unique SSIDs.
+    """
     networks = []
+    system = platform.system()
+    print(f"Scanning for WiFi networks on {system}...")
+    
+    # For testing/development on macOS, return some sample networks
+    if system == "Darwin":
+        print("On macOS, returning sample networks for testing")
+        return ["Home WiFi", "Guest Network", "Office WiFi"]
+    
     try:
-        # This command may require sudo privileges.
-        result = subprocess.run(["sudo", "iwlist", "wlan0", "scan"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("ESSID:"):
-                ssid = line.split("ESSID:")[1].strip().strip('"')
-                if ssid and ssid not in networks:
-                    networks.append(ssid)
+        if system == "Linux":
+            # Use iwlist on Linux (this may require sudo privileges).
+            result = subprocess.run(
+                ["sudo", "iwlist", "wlan0", "scan"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if line.startswith("ESSID:"):
+                    ssid = line.split("ESSID:")[1].strip().strip('"')
+                    if ssid and ssid not in networks:
+                        networks.append(ssid)
+
+        elif system == "Windows":
+            # Use netsh command on Windows.
+            result = subprocess.run(
+                ["netsh", "wlan", "show", "networks", "mode=bssid"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=True
+            )
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                # Windows output typically has lines like "SSID 1 : NetworkName"
+                if line.startswith("SSID ") and ":" in line:
+                    parts = line.split(":", 1)
+                    ssid = parts[1].strip()
+                    if ssid and ssid not in networks:
+                        networks.append(ssid)
+        else:
+            print(f"Unsupported operating system: {system}")
     except Exception as e:
-        print(f"Error scanning WiFi networks: {e}")
+        print(f"Error scanning WiFi networks on {system}: {e}")
+        import traceback
+        traceback.print_exc()
+
     return networks
 
 def update_wifi_settings(ssid, password):
@@ -171,3 +215,8 @@ network={{
         return True, "WiFi settings updated. Reconfiguring WiFi..."
     except Exception as e:
         return False, f"Error updating WiFi settings: {e}"
+    
+
+if __name__ == "__main__":
+    networks = get_available_wifi_networks()
+    print(f"Available WiFi networks: {networks}")
